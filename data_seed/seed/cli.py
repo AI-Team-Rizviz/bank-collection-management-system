@@ -270,5 +270,29 @@ def reset_run(run_id: str = typer.Option(..., help="Run to delete"),
     typer.echo(f"Deleted run '{run_id}'." if n else f"Run '{run_id}' not found.")
 
 
+# --------------------------------------------------------------------------- IAM (identity-access-service) seeds
+identity_app = typer.Typer(no_args_is_help=True, help="Seed the IAM `iam` schema (roles, permissions, teams, dev users).")
+app.add_typer(identity_app, name="identity")
+
+
+@identity_app.command("seed")
+def identity_seed(demo_users: bool = typer.Option(False, "--demo-users", help="Also seed fictional DEV-ONLY users (APP_ENV must be development/test).")) -> None:
+    """Idempotently seed IAM reference data. Uses the IAM service's own DB credentials (never printed)."""
+    from seed.identity import runner
+
+    try:
+        eng = runner.get_iam_engine()
+        counts = runner.seed_catalog(eng)
+        typer.echo("IAM catalog seeded: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+        if demo_users:
+            typer.echo(f"Demo users seeded: {runner.seed_demo_users(eng)}")
+    except ConfigError as exc:
+        typer.secho(f"Configuration error: {exc}", fg="red", err=True)
+        raise typer.Exit(2)
+    except Exception as exc:  # noqa: BLE001
+        typer.secho(f"IAM seeding failed: {type(exc).__name__} (credentials are never printed). Is `alembic upgrade head` applied?", fg="red", err=True)
+        raise typer.Exit(3)
+
+
 if __name__ == "__main__":
     app()
