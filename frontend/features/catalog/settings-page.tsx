@@ -1,8 +1,118 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck,LockKeyhole,KeyRound,ClipboardCheck,Clock3,Database,ArrowUpRight } from "lucide-react";
+import {
+  ShieldCheck,
+  LockKeyhole,
+  KeyRound,
+  ClipboardCheck,
+  Clock3,
+  Database,
+  ArrowUpRight,
+} from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api/client";
-import { PageHeader,QueryState,Panel,Badge } from "@/components/ui/shared";
+import { PageHeader, QueryState, Panel, Badge } from "@/components/ui/shared";
 import { useSession } from "@/app/providers";
-export function SettingsPage(){const query=useQuery({queryKey:["iam","settings"],queryFn:({signal})=>api.settings(signal)}),session=useSession();return <><PageHeader title="IAM configuration" description="Identity integration, administrative controls and application policy status."/><div className="info-banner"><LockKeyhole size={17}/>Security policies are enforced by IAM. This page reports configuration; backend security settings are read-only.</div><QueryState query={query}>{query.data&&<div className="settings-grid">{[{title:"Enterprise identity provider",icon:KeyRound,value:query.data.identityProvider,status:session.mock?"Development":"Connected",description:"Production login requires the enterprise OIDC callback, verified session and logout flow."},{title:"Administrative approvals",icon:ShieldCheck,value:query.data.approvalPolicy,status:"Enforced",description:"Requesters cannot approve their own changes. Every decision records an audit event."},{title:"Session policy",icon:Clock3,value:query.data.sessionPolicy,status:"Read only",description:"The identity provider owns idle timeout, maximum session age and MFA."},{title:"Roles & permissions",icon:Database,value:query.data.catalog,status:"Seed-managed",description:"System-defined roles cannot be deleted. Permission changes follow protected workflows."},{title:"Access reviews",icon:ClipboardCheck,value:query.data.reviewPeriod,status:"Planned",description:"Automated review scheduling and review campaigns are not implemented."},{title:"Account lifecycle",icon:LockKeyhole,value:"Active · Inactive · Suspended · Pending activation",status:"Development contract",description:"Backend currently defines ACTIVE / INACTIVE. Extended states need an agreed IAM API contract."}].map(({title,icon:Icon,value,status,description})=><Panel key={title} title={title} action={<Icon size={18} className="muted"/>}><div className="padded stack"><Badge tone={status==="Enforced"?"green":"gray"}>{status}</Badge><h3>{value}</h3><p className="muted">{description}</p></div></Panel>)}</div>}</QueryState><div className="integration-note"><div><h3>Ready for your IAM service</h3><p>Typed contracts and a same-origin server proxy keep integration changes out of presentation components.</p></div><Link className="text-link" href="/admin/permissions">View permission catalog<ArrowUpRight size={16}/></Link></div></>;}
+export function SettingsPage() {
+  const query = useQuery({
+      queryKey: ["iam", "settings"],
+      queryFn: ({ signal }) => api.settings(signal),
+    }),
+    session = useSession();
+  return (
+    <>
+      <PageHeader
+        title="IAM configuration"
+        description="Identity integration, administrative controls and application policy status."
+      />
+      <div className="info-banner">
+        <LockKeyhole size={17} />
+        Security policies are enforced by IAM. This page reports configuration;
+        backend security settings are read-only.
+      </div>
+      <QueryState query={query}>
+        {query.data && (
+          <div className="settings-grid">
+            {[
+              {
+                title: "Enterprise identity provider",
+                icon: KeyRound,
+                value: query.data.identityProvider,
+                status: session.mock ? "Development" : "Connected",
+                description:
+                  "Production login requires the enterprise OIDC callback, verified session and logout flow.",
+              },
+              {
+                title: "Administrative approvals",
+                icon: ShieldCheck,
+                value: query.data.approvalPolicy,
+                status: "Enforced",
+                description:
+                  "Requesters cannot approve their own changes. Every decision records an audit event.",
+              },
+              {
+                title: "Session policy",
+                icon: Clock3,
+                value: query.data.sessionPolicy,
+                status: "Read only",
+                description:
+                  "The identity provider owns idle timeout, maximum session age and MFA.",
+              },
+              {
+                title: "Roles & permissions",
+                icon: Database,
+                value: query.data.catalog,
+                status: "Seed-managed",
+                description:
+                  "System-defined roles cannot be deleted. Permission changes follow protected workflows.",
+              },
+              {
+                title: "Access reviews",
+                icon: ClipboardCheck,
+                value: query.data.reviewPeriod,
+                status: "Planned",
+                description:
+                  "Automated review scheduling and review campaigns are not implemented.",
+              },
+              {
+                title: "Account lifecycle",
+                icon: LockKeyhole,
+                value: "Active · Inactive · Suspended · Pending activation",
+                status: "Development contract",
+                description:
+                  "Backend currently defines ACTIVE / INACTIVE. Extended states need an agreed IAM API contract.",
+              },
+            ].map(({ title, icon: Icon, value, status, description }) => (
+              <Panel
+                key={title}
+                title={title}
+                action={<Icon size={18} className="muted" />}
+              >
+                <div className="padded stack">
+                  <Badge tone={status === "Enforced" ? "green" : "gray"}>
+                    {status}
+                  </Badge>
+                  <h3>{value}</h3>
+                  <p className="muted">{description}</p>
+                </div>
+              </Panel>
+            ))}
+          </div>
+        )}
+      </QueryState>
+      <div className="integration-note">
+        <div>
+          <h3>Ready for your IAM service</h3>
+          <p>
+            Typed contracts and a same-origin server proxy keep integration
+            changes out of presentation components.
+          </p>
+        </div>
+        <Link className="text-link" href="/admin/permissions">
+          View permission catalog
+          <ArrowUpRight size={16} />
+        </Link>
+      </div>
+    </>
+  );
+}

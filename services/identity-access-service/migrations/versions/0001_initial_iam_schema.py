@@ -25,7 +25,7 @@ def upgrade() -> None:
     sa.Column('created_by', sa.UUID(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.CheckConstraint("(scope_type IN ('OWN','GLOBAL') AND scope_value IS NULL) OR (scope_type NOT IN ('OWN','GLOBAL') AND scope_value ~ '^[A-Z0-9][A-Z0-9_-]{1,63}$')", name=op.f('ck_access_scopes_value_matches_type')),
+    sa.CheckConstraint("(scope_type IN ('OWN','GLOBAL') AND scope_value IS NULL) OR (scope_type NOT IN ('OWN','GLOBAL') AND scope_value IS NOT NULL AND scope_value ~ '^[A-Z0-9][A-Z0-9_-]{1,63}$')", name=op.f('ck_access_scopes_value_matches_type')),
     sa.CheckConstraint("scope_type IN ('OWN','TEAM','BRANCH','REGION','PORTFOLIO','GLOBAL')", name=op.f('ck_access_scopes_scope_type')),
     sa.CheckConstraint("status IN ('ACTIVE','INACTIVE')", name=op.f('ck_access_scopes_status')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_access_scopes')),

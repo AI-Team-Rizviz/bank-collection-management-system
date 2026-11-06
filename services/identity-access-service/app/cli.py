@@ -21,6 +21,11 @@ cli = typer.Typer(no_args_is_help=True, add_completion=False)
 ADMIN_ROLE = "SYSTEM_ADMINISTRATOR"
 
 
+@cli.callback()
+def _root() -> None:
+    """IAM operator commands."""
+
+
 @cli.command("bootstrap-admin")
 def bootstrap_admin(subject: str = typer.Option(..., help="OIDC `sub` of the administrator"),
                     username: str = typer.Option(...), email: str = typer.Option(...),

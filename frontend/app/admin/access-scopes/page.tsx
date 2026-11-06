@@ -1,2 +1,4 @@
 import { ScopesPage } from "@/features/catalog/scopes-page";
-export default function Page(){return <ScopesPage/>;}
+export default function Page() {
+  return <ScopesPage />;
+}

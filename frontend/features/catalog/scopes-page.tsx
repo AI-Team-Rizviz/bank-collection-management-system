@@ -1,15 +1,163 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Plus,ScanLine } from "lucide-react";
+import { Plus, ScanLine } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Scope,ListParams } from "@/lib/api/types";
-import { useList,useChange } from "@/lib/api/hooks";
-import { PageHeader,QueryState,SearchInput,Badge,Notice } from "@/components/ui/shared";
+import type { Scope, ListParams } from "@/lib/api/types";
+import { useList, useChange } from "@/lib/api/hooks";
+import {
+  PageHeader,
+  QueryState,
+  SearchInput,
+  Badge,
+  Notice,
+} from "@/components/ui/shared";
 import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { ChangeForm } from "@/features/access-requests/change-form";
 import { useSession } from "@/app/providers";
 import { can } from "@/lib/auth/policy";
-export function ScopesPage(){const [params,setParams]=useState<ListParams>({page:1,pageSize:8}),[create,setCreate]=useState(false),[revoke,setRevoke]=useState<Scope|null>(null),[message,setMessage]=useState("");const query=useList("scopes",params),users=useList("users",{pageSize:100}),roles=useList("roles",{pageSize:100}),mutation=useChange(),session=useSession();const columns:ColumnDef<Scope>[]=[{accessorKey:"userId",header:"User",cell:({getValue})=><Link className="text-link" href={`/admin/users/${getValue<string>()}`}>{users.data?.items.find(u=>u.id===getValue())?.name??getValue<string>()}</Link>},{accessorKey:"roleId",header:"Approved role",cell:({getValue})=>roles.data?.items.find(r=>r.id===getValue())?.name??getValue<string>()},{accessorKey:"type",header:"Scope type",cell:({getValue})=><Badge tone="gray">{getValue<string>()}</Badge>},{accessorKey:"reference",header:"Organizational reference"},{accessorKey:"region",header:"Region boundary"},{id:"actions",header:"",cell:({row})=>can(session,"iam.user_role.revoke")&&<Button variant="ghost" size="sm" onClick={()=>setRevoke(row.original)}>Revoke scope</Button>}];return <><PageHeader title="Access scopes" description="Understand where approved roles apply across your organization." actions={can(session,"iam.access.request")&&<Button onClick={()=>setCreate(true)}><Plus size={16}/>Request scope</Button>}/><div className="scope-type-strip">{["OWN","TEAM","BRANCH","REGION","PORTFOLIO","GLOBAL"].map(t=><span key={t}><ScanLine size={14}/>{t}</span>)}</div><div className="info-banner">A role defines what a user can do. An approved scope defines where. Expansions require independent review within your delegated authority.</div><Notice message={message}/><section className="panel"><div className="filter-toolbar"><SearchInput value={params.search??""} onChange={v=>setParams({...params,search:v,page:1})} placeholder="Search user, scope or reference…"/><span className="scope-note">Punjab region</span></div><QueryState query={query}>{query.data&&<DataTable data={query.data} columns={columns} params={params} onParams={setParams}/>}</QueryState></section><ChangeForm scope open={create} onOpenChange={setCreate} onSuccess={setMessage}/><Dialog open={!!revoke} onOpenChange={v=>{if(!v)setRevoke(null);}} title="Revoke approved scope?" description="This removes access within the selected boundary and records an audit event."><div className="dialog-body"><p>{revoke?.userId} · {revoke?.type} · {revoke?.reference}</p><Notice error={mutation.error}/></div><div className="dialog-footer"><Button variant="outline" onClick={()=>setRevoke(null)}>Cancel</Button><Button variant="destructive" disabled={mutation.isPending} onClick={async()=>{if(!revoke)return;try{const r=await mutation.mutateAsync({path:`scopes/${revoke.id}`,method:"DELETE"});setMessage(r.message);setRevoke(null);}catch{}}}>{mutation.isPending?"Revoking…":"Revoke scope"}</Button></div></Dialog></>;}
+export function ScopesPage() {
+  const [params, setParams] = useState<ListParams>({ page: 1, pageSize: 8 }),
+    [create, setCreate] = useState(false),
+    [revoke, setRevoke] = useState<Scope | null>(null),
+    [message, setMessage] = useState("");
+  const query = useList("scopes", params),
+    users = useList("users", { pageSize: 100 }),
+    roles = useList("roles", { pageSize: 100 }),
+    mutation = useChange(),
+    session = useSession();
+  const columns: ColumnDef<Scope>[] = [
+    {
+      accessorKey: "userId",
+      header: "User",
+      cell: ({ getValue }) => (
+        <Link className="text-link" href={`/admin/users/${getValue<string>()}`}>
+          {users.data?.items.find((u) => u.id === getValue())?.name ??
+            getValue<string>()}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: "roleId",
+      header: "Approved role",
+      cell: ({ getValue }) =>
+        roles.data?.items.find((r) => r.id === getValue())?.name ??
+        getValue<string>(),
+    },
+    {
+      accessorKey: "type",
+      header: "Scope type",
+      cell: ({ getValue }) => <Badge tone="gray">{getValue<string>()}</Badge>,
+    },
+    { accessorKey: "reference", header: "Organizational reference" },
+    { accessorKey: "region", header: "Region boundary" },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) =>
+        can(session, "iam.user_role.revoke") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRevoke(row.original)}
+          >
+            Revoke scope
+          </Button>
+        ),
+    },
+  ];
+  return (
+    <>
+      <PageHeader
+        title="Access scopes"
+        description="Understand where approved roles apply across your organization."
+        actions={
+          can(session, "iam.access.request") && (
+            <Button onClick={() => setCreate(true)}>
+              <Plus size={16} />
+              Request scope
+            </Button>
+          )
+        }
+      />
+      <div className="scope-type-strip">
+        {["OWN", "TEAM", "BRANCH", "REGION", "PORTFOLIO", "GLOBAL"].map((t) => (
+          <span key={t}>
+            <ScanLine size={14} />
+            {t}
+          </span>
+        ))}
+      </div>
+      <div className="info-banner">
+        A role defines what a user can do. An approved scope defines where.
+        Expansions require independent review within your delegated authority.
+      </div>
+      <Notice message={message} />
+      <section className="panel">
+        <div className="filter-toolbar">
+          <SearchInput
+            value={params.search ?? ""}
+            onChange={(v) => setParams({ ...params, search: v, page: 1 })}
+            placeholder="Search user, scope or reference…"
+          />
+          <span className="scope-note">Punjab region</span>
+        </div>
+        <QueryState query={query}>
+          {query.data && (
+            <DataTable
+              data={query.data}
+              columns={columns}
+              params={params}
+              onParams={setParams}
+            />
+          )}
+        </QueryState>
+      </section>
+      <ChangeForm
+        scope
+        open={create}
+        onOpenChange={setCreate}
+        onSuccess={setMessage}
+      />
+      <Dialog
+        open={!!revoke}
+        onOpenChange={(v) => {
+          if (!v) setRevoke(null);
+        }}
+        title="Revoke approved scope?"
+        description="This removes access within the selected boundary and records an audit event."
+      >
+        <div className="dialog-body">
+          <p>
+            {revoke?.userId} · {revoke?.type} · {revoke?.reference}
+          </p>
+          <Notice error={mutation.error} />
+        </div>
+        <div className="dialog-footer">
+          <Button variant="outline" onClick={() => setRevoke(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={mutation.isPending}
+            onClick={async () => {
+              if (!revoke) return;
+              try {
+                const r = await mutation.mutateAsync({
+                  path: `scopes/${revoke.id}`,
+                  method: "DELETE",
+                });
+                setMessage(r.message);
+                setRevoke(null);
+              } catch {}
+            }}
+          >
+            {mutation.isPending ? "Revoking…" : "Revoke scope"}
+          </Button>
+        </div>
+      </Dialog>
+    </>
+  );
+}

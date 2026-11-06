@@ -188,7 +188,7 @@ class AccessScope(Base, Timestamps):
         CheckConstraint("status IN ('ACTIVE','INACTIVE')", name="status"),
         CheckConstraint(
             "(scope_type IN ('OWN','GLOBAL') AND scope_value IS NULL) OR "
-            "(scope_type NOT IN ('OWN','GLOBAL') AND scope_value ~ '^[A-Z0-9][A-Z0-9_-]{1,63}$')",
+            "(scope_type NOT IN ('OWN','GLOBAL') AND scope_value IS NOT NULL AND scope_value ~ '^[A-Z0-9][A-Z0-9_-]{1,63}$')",
             name="value_matches_type",
         ),
         Index("uq_access_scopes_type_value", "scope_type", text("coalesce(scope_value, '')"), unique=True),

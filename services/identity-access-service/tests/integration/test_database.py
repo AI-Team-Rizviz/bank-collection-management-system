@@ -114,6 +114,7 @@ def test_transaction_rollback_leaves_nothing(w, engine):
 def test_savepoint_isolates_a_failed_insert(w, engine):
     with Session(engine) as s:
         u = mk_user(s, "sp1")
+        uid = u.id
         role = w.role("COLLECTION_AGENT")
         s.add(UserRole(user_id=u.id, role_id=role.id))
         s.flush()
@@ -122,7 +123,7 @@ def test_savepoint_isolates_a_failed_insert(w, engine):
             s.flush()
         s.commit()
     with Session(engine) as s:
-        assert s.scalar(select(func.count()).select_from(UserRole).where(UserRole.user_id == u.id)) == 1
+        assert s.scalar(select(func.count()).select_from(UserRole).where(UserRole.user_id == uid)) == 1
 
 
 def test_failed_request_rolls_back_whole_transaction(w, admin):
@@ -248,7 +249,7 @@ def test_migrations_up_down_up_and_no_drift(fresh_db):
     assert tables == expected
     with eng.connect() as c:
         diff = compare_metadata(MigrationContext.configure(c, opts={"include_schemas": True, "version_table_schema": "iam",
-                                                                    "include_object": lambda o, n, t, r, c: t != "table" or o.schema == "iam"}),
+                                                                    "include_object": lambda o, n, t, r, c: t != "table" or (o.schema == "iam" and n != "alembic_version_iam")}),
                                 Base.metadata)
     assert diff == [], diff
     command.downgrade(cfg, "base")
@@ -308,9 +309,9 @@ def test_seed_roles_permissions_and_mappings(w, db):
 
 
 def test_demo_seed_idempotent_and_environment_guarded(engine, db):
+    from seed.config import ConfigError
     from seed.identity import demo_users, runner
     from sqlalchemy.exc import SQLAlchemyError  # noqa: F401
-    from seed.config import ConfigError
 
     with pytest.raises(ConfigError):
         runner.seed_demo_users(engine, app_env="production")
