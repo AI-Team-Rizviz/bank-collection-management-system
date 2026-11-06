@@ -140,16 +140,15 @@ To select the live proxy:
 ```dotenv
 IAM_ADAPTER=live
 IAM_API_BASE_URL=https://your-private-iam-service
-IAM_SESSION_COOKIE=__Host-iam_session
 ```
 
 The example port in `.env.example` is illustrative, not a confirmed service port. Never prefix private service credentials or URLs with `NEXT_PUBLIC_`.
 
-The session verifier sends only the named HttpOnly session cookie to IAM `/api/v1/me` and validates the returned session shape. Missing/invalid/expired/unreachable sessions fail closed. The provider must issue the secure cookie and verify its session server-side. Route-level server gates and UI permission checks improve access behavior; the IAM service remains authoritative for every read and mutation. The proxy restricts resources, disallows upstream redirects, normalizes errors, bounds requests with timeouts and rejects writes whose Origin does not match the application origin. It forwards an `X-CSRF-Token` when supplied; align IdP-specific CSRF issuance and client token delivery before connecting an IdP that requires it.
+The session verifier sends only the HttpOnly access-token cookie as a Bearer token to IAM `/api/v1/me` and validates the returned session shape. Missing/invalid/expired/unreachable sessions fail closed. Route-level server gates and UI permission checks improve access behavior; the IAM service remains authoritative for every read and mutation. The proxy restricts resources, disallows upstream redirects, normalizes errors, bounds requests with timeouts and rejects writes whose Origin does not match the application origin.
 
-**OIDC sign-in, callback, logout, MFA and production session lifecycle are not implemented.** Wire your standards-based provider's server-side authorization-code flow, state/nonce/PKCE validation and secure session issuance, or your approved identity gateway. This app deliberately provides no fake production login. `npm start` with mock configuration displays the integration screen and API requests return 401.
+**Sign-in** is a username/password form at `/login`. The server route `/api/auth/login` forwards the credentials to the IAM service (`POST /api/v1/auth/login`), which verifies them and returns a signed access token; the token is stored in an HttpOnly `iam_access_token` cookie (`Secure` in production) and `/api/auth/logout` clears it. MFA, lockout/rate limiting and password-reset flows are not implemented (apply rate limiting at the gateway). `npm start` with mock configuration displays the sign-in-required screen and API requests return 401.
 
-Before live rollout, implement/confirm IAM endpoints, DTO mapping and pagination semantics; connect the OIDC/session lifecycle and CSRF flow; enforce all role, scope, separation-of-duty, approval transaction and append-only audit policies in the backend; and run integration/security tests against that service. A live backend was not available for verification.
+Before live rollout, implement/confirm IAM endpoints, DTO mapping and pagination semantics; confirm the session lifecycle and CSRF flow; enforce all role, scope, separation-of-duty, approval transaction and append-only audit policies in the backend; and run integration/security tests against that service. A live backend was not available for verification.
 
 ## Verification
 

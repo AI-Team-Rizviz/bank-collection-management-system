@@ -39,6 +39,7 @@ class User(Base, Timestamps):
     username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str] = mapped_column(String(254), nullable=False, unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255))  # salted scrypt; NULL = cannot log in
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE", server_default="ACTIVE")
     # Bumped on any change that affects the user's effective access; lets consumers detect stale caches.
     authz_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")

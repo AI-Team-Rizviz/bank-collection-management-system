@@ -1,6 +1,5 @@
-"""DEVELOPMENT-ONLY fictional users. Reserved `.invalid` e-mail domain; no passwords exist (authentication is OIDC).
-
-`external_identity_id` is the OIDC `sub` the local mock provider should issue for that persona.
+"""DEVELOPMENT-ONLY fictional users. Reserved `.invalid` e-mail domain; all share the development password
+set by the seeder (DEMO_USER_PASSWORD, default in runner.py). Never seed these outside development/test.
 """
 # (username, display_name, roles, [(team_code, member_role)], [(scope_type, scope_value)])
 DEMO_USERS = [

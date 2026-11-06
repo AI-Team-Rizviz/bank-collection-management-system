@@ -26,24 +26,22 @@ class Settings(BaseSettings):
     migration_database_url: str | None = None
     database_schema: str = "iam"
 
-    oidc_issuer: str | None = None
-    oidc_audience: str | None = None
-    oidc_jwks_url: str | None = None
-    oidc_algorithms: Annotated[list[str], NoDecode] = ["RS256", "ES256"]
-    oidc_leeway_seconds: int = Field(30, ge=0, le=120)
-    jwks_cache_ttl_seconds: int = Field(300, ge=10)
+    # Login-form authentication: this service verifies passwords and signs its own access tokens.
+    jwt_secret_key: str | None = None
+    access_token_ttl_seconds: int = Field(3600, ge=60, le=86400)
+    token_leeway_seconds: int = Field(30, ge=0, le=120)
     service_subjects: Annotated[list[str], NoDecode] = []
 
     cors_allowed_origins: Annotated[list[str], NoDecode] = []
     enable_api_docs: bool | None = None
     authz_cache_ttl_seconds: int = Field(60, ge=0, le=3600)
 
-    @field_validator("oidc_algorithms", "service_subjects", "cors_allowed_origins", mode="before")
+    @field_validator("service_subjects", "cors_allowed_origins", mode="before")
     @classmethod
     def _split(cls, v):
         return _csv(v)
 
-    @field_validator("oidc_issuer", "oidc_audience", "oidc_jwks_url", "migration_database_url", "enable_api_docs", mode="before")
+    @field_validator("jwt_secret_key", "migration_database_url", "enable_api_docs", mode="before")
     @classmethod
     def _empty_to_none(cls, v):
         return None if isinstance(v, str) and not v.strip() else v
@@ -55,23 +53,11 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_SCHEMA must be a simple lower-case identifier")
         return v
 
-    @field_validator("oidc_algorithms")
-    @classmethod
-    def _asym_only(cls, v: list[str]) -> list[str]:
-        allowed = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512"}
-        if not v or any(a not in allowed for a in v):
-            raise ValueError("OIDC_ALGORITHMS must be asymmetric algorithms only (no HS*/none)")
-        return v
-
     @model_validator(mode="after")
     def _production_rules(self) -> Settings:
         if self.app_env == "production":
-            if not (self.oidc_issuer and self.oidc_audience):
-                raise ValueError("OIDC_ISSUER and OIDC_AUDIENCE are required in production")
-            for name in ("oidc_issuer", "oidc_jwks_url"):
-                val = getattr(self, name)
-                if val and not val.startswith("https://"):
-                    raise ValueError(f"{name.upper()} must be https in production")
+            if not self.jwt_secret_key or len(self.jwt_secret_key) < 32:
+                raise ValueError("JWT_SECRET_KEY (at least 32 characters) is required in production")
             if "*" in self.cors_allowed_origins:
                 raise ValueError("Wildcard CORS origin is not allowed in production")
         return self

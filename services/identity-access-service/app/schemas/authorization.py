@@ -39,11 +39,11 @@ class MyPermissionsOut(BaseModel):
 
 class AuthorizationCheck(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"example": {
-        "subject": "oidc-subject-123", "permission": "case.read_team",
+        "subject": "local-agent001", "permission": "case.read_team",
         "resource": {"case_id": "CASE-10001", "assigned_team_id": "TEAM-001", "branch_id": "BR-001"}}})
     user_id: uuid.UUID | None = Field(None, description="IAM user id (from a validated token claim mapping)")
     subject: Annotated[str, StringConstraints(max_length=255)] | None = Field(
-        None, description="Validated OIDC `sub` of the end user")
+        None, description="Validated token `sub` of the end user")
     permission: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$", max_length=100)]
     resource: dict[str, Any] | None = Field(None, description="Trusted attributes fetched from the owning service")
 

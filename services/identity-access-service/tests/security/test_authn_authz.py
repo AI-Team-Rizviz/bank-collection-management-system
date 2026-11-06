@@ -20,7 +20,7 @@ def operations(app):
 
 
 def protected(app):
-    return [(m, re.sub(r"\{[^}]+\}", Z, p)) for m, p in operations(app) if "/health/" not in p]
+    return [(m, re.sub(r"\{[^}]+\}", Z, p)) for m, p in operations(app) if "/health/" not in p and p != "/api/v1/auth/login"]
 
 
 def test_openapi_covers_the_agreed_surface(app):
@@ -38,7 +38,7 @@ def test_openapi_covers_the_agreed_surface(app):
         ("GET", "/api/v1/me"), ("GET", "/api/v1/me/permissions"), ("POST", "/api/v1/authorization/check"),
         ("POST", "/api/v1/access-requests"), ("GET", "/api/v1/access-requests"), ("GET", "/api/v1/access-requests/{}"),
         ("POST", "/api/v1/access-requests/{}/approve"), ("POST", "/api/v1/access-requests/{}/reject"),
-        ("GET", "/api/v1/audit-logs"), ("GET", "/api/v1/health/live"), ("GET", "/api/v1/health/ready"),
+        ("GET", "/api/v1/audit-logs"), ("POST", "/api/v1/auth/login"), ("GET", "/api/v1/health/live"), ("GET", "/api/v1/health/ready"),
     }
     assert expected <= ops, expected - ops
 
@@ -81,8 +81,8 @@ def test_missing_or_malformed_authorization_header(w, header):
     assert r.status_code == 401
 
 
-def test_invalid_signature(w, other_key):
-    r = w.client.get(f"{A}/me", headers=w.h("sub-x", key=other_key))
+def test_invalid_signature(w):
+    r = w.client.get(f"{A}/me", headers=w.h("sub-x", key="another-secret-another-secret-123456"))
     assert r.status_code == 401 and r.json()["error"]["message"] == "Invalid or expired token"
 
 
@@ -97,8 +97,8 @@ def test_wrong_issuer_and_audience(w, admin):
     assert (ISSUER, AUDIENCE) != ("https://other.invalid", "not-us")
 
 
-def test_unsigned_and_unknown_kid_tokens(w, admin):
-    assert w.client.get(f"{A}/me", headers=w.h(admin, kid="rogue")).status_code == 401
+def test_unsigned_and_other_algorithm_tokens(w, admin):
+    assert w.client.get(f"{A}/me", headers=w.h(admin, alg="HS512")).status_code == 401
     assert w.client.get(f"{A}/me", headers={"Authorization": "Bearer eyJhbGciOiJub25lIn0.e30."}).status_code == 401
 
 
@@ -149,23 +149,23 @@ def test_security_headers_and_no_default_cors(w, admin):
     assert "access-control-allow-origin" not in r.headers
 
 
-def test_cors_is_restricted_to_configured_origins(engine, verifier):
+def test_cors_is_restricted_to_configured_origins(engine, tokens):
     from fastapi.testclient import TestClient
 
     from app.core.config import Settings
     from app.main import create_app
     s = Settings(database_url="postgresql+psycopg://x@h/d", app_env="test", cors_allowed_origins="https://cms.example.invalid",
                  _env_file=None)
-    with TestClient(create_app(s, verifier)) as c:
+    with TestClient(create_app(s, tokens)) as c:
         ok = c.options(f"{A}/me", headers={"Origin": "https://cms.example.invalid", "Access-Control-Request-Method": "GET"})
         no = c.options(f"{A}/me", headers={"Origin": "https://evil.invalid", "Access-Control-Request-Method": "GET"})
     assert ok.headers.get("access-control-allow-origin") == "https://cms.example.invalid"
     assert "access-control-allow-origin" not in no.headers
 
 
-def test_tokens_never_appear_in_logs(w, admin, caplog, other_key):
+def test_tokens_never_appear_in_logs(w, admin, caplog):
     caplog.set_level(logging.DEBUG)
-    bad = w.h("sub-x", key=other_key)["Authorization"]
+    bad = w.h("sub-x", key="another-secret-another-secret-123456")["Authorization"]
     good = w.h(admin)["Authorization"]
     w.client.get(f"{A}/me", headers={"Authorization": bad})
     w.client.get(f"{A}/me", headers={"Authorization": good})
@@ -185,31 +185,31 @@ def test_authentication_unavailable_fails_closed(engine):
 
     from app.core.config import Settings
     from app.main import create_app
-    s = Settings(database_url="postgresql+psycopg://x@h/d", app_env="test", _env_file=None, oidc_issuer=None, oidc_audience=None)
+    s = Settings(database_url="postgresql+psycopg://x@h/d", app_env="test", _env_file=None, jwt_secret_key=None)
     with TestClient(create_app(s)) as c:
         r = c.get(f"{A}/me", headers={"Authorization": "Bearer anything"})
     assert r.status_code == 503 and r.json()["error"]["code"] == "authentication_unavailable"
 
 
 # --------------------------------------------------------------- docs / health
-def test_docs_available_in_development_and_disabled_in_production(engine, verifier):
+def test_docs_available_in_development_and_disabled_in_production(engine, tokens):
     from fastapi.testclient import TestClient
 
     from app.core.config import Settings
     from app.main import create_app
     base = dict(database_url="postgresql+psycopg://x@h/d", _env_file=None)
-    with TestClient(create_app(Settings(app_env="development", **base), verifier)) as dev:
+    with TestClient(create_app(Settings(app_env="development", **base), tokens)) as dev:
         assert dev.get("/docs").status_code == 200
         schema = dev.get("/openapi.json").json()
         assert {t["name"] for t in schema["tags"]} >= {"Users", "Roles", "Permissions", "Teams", "Access Scopes",
                                                       "Authorization", "Access Requests", "Audit"}
         assert "bearerAuth" in str(schema["components"]["securitySchemes"]).replace("HTTPBearer", "bearerAuth")
-    prod = Settings(app_env="production", oidc_issuer="https://idp.example.invalid", oidc_audience="a", **base)
-    with TestClient(create_app(prod, verifier)) as c:
+    prod = Settings(app_env="production", jwt_secret_key="x" * 32, **base)
+    with TestClient(create_app(prod, tokens)) as c:
         assert c.get("/docs").status_code == 404 and c.get("/openapi.json").status_code == 404
-    forced = Settings(app_env="production", oidc_issuer="https://idp.example.invalid", oidc_audience="a",
+    forced = Settings(app_env="production", jwt_secret_key="x" * 32,
                       enable_api_docs="true", **base)
-    with TestClient(create_app(forced, verifier)) as c:
+    with TestClient(create_app(forced, tokens)) as c:
         assert c.get("/docs").status_code == 200
 
 
@@ -219,7 +219,7 @@ def test_health_endpoints_are_public_and_minimal(client):
     assert r.status_code == 200 and r.json() == {"status": "ready"}
 
 
-def test_readiness_fails_closed_without_leaking_details(engine, verifier, monkeypatch):
+def test_readiness_fails_closed_without_leaking_details(engine, tokens, monkeypatch):
     from fastapi.testclient import TestClient
 
     from app.core import database
@@ -233,14 +233,14 @@ def test_readiness_fails_closed_without_leaking_details(engine, verifier, monkey
         def rollback(self): ...
         def close(self): ...
 
-    app = create_app(verifier=verifier)
+    app = create_app(tokens=tokens)
     app.dependency_overrides[database.get_db] = lambda: iter([Boom()])
     with TestClient(app) as c:
         r = c.get(f"{A}/health/ready")
     assert r.status_code == 503 and r.json() == {"status": "unavailable"}
 
 
-def test_unhandled_errors_are_generic(engine, verifier):
+def test_unhandled_errors_are_generic(engine, tokens):
     from fastapi.testclient import TestClient
 
     from app.core import database
@@ -250,7 +250,7 @@ def test_unhandled_errors_are_generic(engine, verifier):
         raise RuntimeError("secret connection string postgresql://u:pw@h/d")
         yield  # pragma: no cover
 
-    app = create_app(verifier=verifier)
+    app = create_app(tokens=tokens)
     app.dependency_overrides[database.get_db] = broken
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.get(f"{A}/me", headers={"Authorization": "Bearer x"})

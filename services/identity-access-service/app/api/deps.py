@@ -18,9 +18,9 @@ from app.domain.enums import ActorType, AuditOutcome
 from app.domain.models import User
 from app.infrastructure import audit_repository as audit
 from app.infrastructure.audit_repository import ActorContext
-from app.infrastructure.identity_provider import InvalidToken
+from app.infrastructure.tokens import InvalidToken
 
-bearer = HTTPBearer(auto_error=False, description="OIDC access token issued by the configured identity provider")
+bearer = HTTPBearer(auto_error=False, description="Access token returned by POST /api/v1/auth/login")
 
 
 class NotConfigured(AppError):
@@ -49,7 +49,7 @@ def _ctx(request: Request, actor_type: ActorType, user_id=None, ref=None) -> Act
 
 def get_caller(request: Request, creds: HTTPAuthorizationCredentials | None = Depends(bearer),
                db: Session = Depends(get_db)) -> Caller:
-    verifier = request.app.state.verifier
+    verifier = request.app.state.tokens
     if creds is None or creds.scheme.lower() != "bearer":
         raise Unauthenticated("Authentication required")
     if verifier is None:

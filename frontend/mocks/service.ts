@@ -480,7 +480,7 @@ export class MockIamService {
       if (resource === "settings")
         return {
           identityProvider:
-            "Development identity adapter · live OIDC not connected",
+            "Development identity adapter · mock login",
           sessionPolicy:
             "Live session policy unavailable until IAM integration",
           approvalPolicy:

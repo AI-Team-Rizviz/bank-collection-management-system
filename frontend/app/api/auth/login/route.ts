@@ -2,67 +2,47 @@ import { NextRequest } from "next/server";
 import { TOKEN_COOKIE } from "@/lib/auth/server";
 
 /**
- * DEVELOPMENT-ONLY sign-in. It mints a token from the local mock OIDC server for the
- * seeded user `demo-<username>` (see identity-access-service README, "Local development
- * login"). Disabled in production; replace with an authorization-code flow against the
- * bank's identity provider.
+ * Username/password sign-in. The credentials are forwarded to the IAM service
+ * (POST /api/v1/auth/login), which verifies them and returns a signed access token.
+ * The token is stored in an HttpOnly cookie and never exposed to browser JavaScript.
  */
 export async function POST(request: NextRequest) {
-  if (
-    process.env.NODE_ENV === "production" ||
-    process.env.IAM_DEV_LOGIN !== "true"
-  )
-    return Response.json({ message: "Dev sign-in is disabled" }, { status: 404 });
+  if (process.env.IAM_ADAPTER !== "live" || !process.env.IAM_API_BASE_URL)
+    return Response.json({ message: "Sign-in is not available" }, { status: 404 });
   if (request.headers.get("origin") !== request.nextUrl.origin)
     return Response.json({ message: "Same-origin request required" }, { status: 403 });
-  const { username } = (await request.json().catch(() => ({}))) as {
+  const { username, password } = (await request.json().catch(() => ({}))) as {
     username?: string;
+    password?: string;
   };
-  if (!username || !/^[a-z0-9][a-z0-9._-]{2,63}$/.test(username))
-    return Response.json({ message: "Enter a valid username" }, { status: 422 });
-  const tokenUrl =
-    process.env.IAM_DEV_TOKEN_URL ?? "http://localhost:8081/default/token";
-  let token: string | undefined;
+  if (!username || !password)
+    return Response.json({ message: "Enter your username and password" }, { status: 422 });
+  let upstream: Response;
   try {
-    const response = await fetch(tokenUrl, {
+    upstream = await fetch(`${process.env.IAM_API_BASE_URL}/api/v1/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: `demo-${username}`,
-        client_secret: "x",
-        scope: process.env.IAM_DEV_AUDIENCE ?? "bank-cms-iam",
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+      cache: "no-store",
       signal: AbortSignal.timeout(10000),
     });
-    token = (await response.json()).access_token;
   } catch {
-    return Response.json(
-      { message: "Identity provider is unreachable" },
-      { status: 503 },
-    );
+    return Response.json({ message: "IAM service is unavailable" }, { status: 503 });
   }
-  if (!token)
-    return Response.json({ message: "Sign-in failed" }, { status: 401 });
-  // Verify IAM accepts this identity before issuing a session cookie.
-  const check = await fetch(`${process.env.IAM_API_BASE_URL}/api/v1/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  }).catch(() => null);
-  if (!check) return Response.json({ message: "IAM service is unavailable" }, { status: 503 });
-  if (!check.ok)
-    return Response.json(
-      { message: "Access denied: no active IAM user for this account" },
-      { status: 403 },
-    );
+  if (upstream.status === 401 || upstream.status === 422)
+    return Response.json({ message: "Invalid username or password" }, { status: 401 });
+  if (!upstream.ok)
+    return Response.json({ message: "IAM service is unavailable" }, { status: 503 });
+  const { access_token: token, expires_in: expiresIn } = (await upstream.json().catch(() => ({}))) as {
+    access_token?: string;
+    expires_in?: number;
+  };
+  if (!token) return Response.json({ message: "Sign-in failed" }, { status: 502 });
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   const response = Response.json({ ok: true });
-  const exp = JSON.parse(
-    Buffer.from(token.split(".")[1], "base64url").toString(),
-  ).exp as number | undefined;
-  const maxAge = exp ? Math.max(60, exp - Math.floor(Date.now() / 1000)) : 3600;
   response.headers.append(
     "Set-Cookie",
-    `${TOKEN_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+    `${TOKEN_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${expiresIn ?? 3600}${secure}`,
   );
   return response;
 }

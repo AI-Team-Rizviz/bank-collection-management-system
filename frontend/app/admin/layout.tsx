@@ -11,12 +11,8 @@ async function AuthenticatedAdmin({ children }: { children: React.ReactNode }) {
     return (
       <main className="auth-screen">
         <div className="brand-mark">C</div>
-        <h1>Connect your enterprise identity</h1>
+        <h1>Sign in required</h1>
         <p>This workspace requires a verified IAM session.</p>
-        <p>
-          OIDC login is awaiting your identity provider integration. Production
-          access is disabled until it is connected.
-        </p>
         <Link href={process.env.IAM_ADAPTER === "live" ? "/login" : "/"}>
           {process.env.IAM_ADAPTER === "live" ? "Sign in" : "Return to application"}
         </Link>

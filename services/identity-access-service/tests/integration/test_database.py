@@ -336,13 +336,14 @@ def test_bootstrap_admin_cli(engine, db):
 
     from app.cli import cli
     runner = CliRunner()
-    args = ["bootstrap-admin", "--subject", "real-oidc-sub", "--username", "firstadmin", "--email", "First@Example.invalid",
+    args = ["bootstrap-admin", "--username", "firstadmin", "--email", "First@Example.invalid",
             "--display-name", "First Admin"]
-    res = runner.invoke(cli, args)
+    res = runner.invoke(cli, args, input="a-long-password\na-long-password\n")
     assert res.exit_code == 0, res.output
     db.expire_all()
     u = db.scalar(select(User).where(User.username == "firstadmin"))
     assert u.email == "first@example.invalid"
     assert db.scalar(select(Role.code).join(UserRole).where(UserRole.user_id == u.id)) == "SYSTEM_ADMINISTRATOR"
-    assert runner.invoke(cli, args).exit_code == 1            # no duplicates
+    assert u.password_hash and runner.invoke(cli, ["set-password", "--username", "firstadmin"], input="another-long-pw\nanother-long-pw\n").exit_code == 0
+    assert runner.invoke(cli, args, input="a-long-password\na-long-password\n").exit_code == 1            # no duplicates
     assert db.scalar(select(func.count()).select_from(AuditLog).where(AuditLog.action == "user.bootstrap_admin")) == 1

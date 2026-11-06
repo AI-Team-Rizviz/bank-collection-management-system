@@ -1,28 +1,16 @@
-# Local development ONLY. Nothing here is suitable for production (anonymous mock IdP, plain HTTP).
+# Local development ONLY. Nothing here is suitable for production (throwaway secret, plain HTTP).
 # Usage (from this directory):   docker compose -f docker-compose.dev.yml up --build
 #
 # PostgreSQL is NOT started here: the project's existing `bank-cms` server is used. From inside a container the host's
 # PostgreSQL is reachable as host.docker.internal (change DATABASE_URL below if your database runs as a Compose service,
 # then use that service name instead of `localhost`).
 services:
-  oidc:
-    # Local OIDC provider that issues signed tokens for any requested subject (see README "Local development login").
-    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
-    ports: ["8081:8080"]
-    environment:
-      SERVER_PORT: "8080"
-      JSON_CONFIG: '{"interactiveLogin": false, "httpServer": "NettyWrapper"}'
-
   identity-access-service:
     build: .
-    depends_on: [oidc]
     ports: ["8000:8000"]
     environment:
       APP_ENV: development
       DATABASE_URL: ${IAM_DOCKER_DATABASE_URL:?set IAM_DOCKER_DATABASE_URL, e.g. postgresql+psycopg://iam_user:...@host.docker.internal:5432/bank-cms}
       DATABASE_SCHEMA: iam
-      # Tokens are minted via the host-mapped port, so `iss` is localhost:8081; keys are fetched over the Compose network.
-      OIDC_ISSUER: http://localhost:8081/default
-      OIDC_JWKS_URL: http://oidc:8080/default/jwks
-      OIDC_AUDIENCE: bank-cms-iam
+      JWT_SECRET_KEY: dev-only-secret-change-me-0123456789abcdef   # development only
       SERVICE_SUBJECTS: svc-policy-service,svc-collections-service

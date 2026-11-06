@@ -35,12 +35,12 @@ export function SettingsPage() {
           <div className="settings-grid">
             {[
               {
-                title: "Enterprise identity provider",
+                title: "Authentication",
                 icon: KeyRound,
                 value: query.data.identityProvider,
                 status: session.mock ? "Development" : "Connected",
                 description:
-                  "Production login requires the enterprise OIDC callback, verified session and logout flow.",
+                  "Username/password login is verified by the IAM service, which issues the session token.",
               },
               {
                 title: "Administrative approvals",

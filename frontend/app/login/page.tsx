@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const router = useRouter();
@@ -14,7 +15,7 @@ export default function LoginPage() {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username }),
+      body: JSON.stringify({ username, password }),
     }).catch(() => null);
     if (response?.ok) {
       router.replace("/admin/dashboard");
@@ -31,7 +32,7 @@ export default function LoginPage() {
     <main className="auth-screen">
       <div className="brand-mark">C</div>
       <h1>Sign in to Bank CMS</h1>
-      <p>Development sign-in via the local OIDC provider.</p>
+      <p>Enter your username and password.</p>
       <form onSubmit={submit} style={{ display: "grid", gap: 12, width: 320 }}>
         <label>
           IAM username
@@ -39,12 +40,23 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value.trim())}
             placeholder="sysadmin001"
+            autoFocus
             autoComplete="username"
             required
           />
         </label>
+        <label>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </label>
         {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={busy || !username}>
+        <button type="submit" disabled={busy || !username || !password}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>

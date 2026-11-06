@@ -9,16 +9,19 @@ from sqlalchemy.orm import Session
 from app.application.common import bump_authz_version, get_or_404, insert_or_conflict, paginate, utcnow
 from app.core.config import get_settings
 from app.core.exceptions import BadRequest, Conflict, Forbidden
+from app.core.passwords import hash_password
 from app.domain.models import User
 from app.infrastructure import audit_repository as audit
 from app.infrastructure.audit_repository import ActorContext
 
 
 def create_user(db: Session, ctx: ActorContext, data) -> User:
-    if data.external_identity_id in get_settings().service_subjects:
+    subject = data.external_identity_id or f"local-{data.username}"
+    if subject in get_settings().service_subjects:
         raise BadRequest("external_identity_id is reserved")
-    user = User(external_identity_id=data.external_identity_id, username=data.username,
-                display_name=data.display_name, email=data.email, created_by=ctx.user_id, updated_by=ctx.user_id)
+    user = User(external_identity_id=subject, username=data.username,
+                display_name=data.display_name, email=data.email, created_by=ctx.user_id, updated_by=ctx.user_id,
+                password_hash=hash_password(data.password) if data.password else None)
     insert_or_conflict(db, user, "A user with the same identity, username or email already exists")
     audit.record(db, ctx, "user.create", target_type="user", target_id=user.id, details={"username": user.username})
     return user

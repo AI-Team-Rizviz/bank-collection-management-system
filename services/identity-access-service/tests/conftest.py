@@ -21,8 +21,10 @@ sys.path.insert(0, str(ROOT / "data_seed"))  # reuse seed.identity
 
 ADMIN_URL = os.environ.get("TEST_DATABASE_URL")
 DB_NAME = f"iam_test_{uuid.uuid4().hex[:10]}"
-ISSUER, AUDIENCE = "https://idp.test.invalid/realm", "bank-cms-iam"
+SECRET = "test-secret-key-0123456789-abcdefghijklmnop"
+ISSUER = AUDIENCE = "bank-cms-iam"
 SERVICE_SUB = "svc-policy-service"
+PASSWORD = "correct-horse-battery"
 
 from sqlalchemy.engine import make_url  # noqa: E402
 
@@ -31,58 +33,34 @@ if ADMIN_URL:
 else:
     TEST_URL = "postgresql+psycopg://unused@127.0.0.1:1/unused"
 os.environ.update({
-    "APP_ENV": "test", "DATABASE_URL": TEST_URL, "DATABASE_SCHEMA": "iam", "OIDC_ISSUER": ISSUER,
-    "OIDC_AUDIENCE": AUDIENCE, "SERVICE_SUBJECTS": SERVICE_SUB, "AUTHZ_CACHE_TTL_SECONDS": "60",
+    "APP_ENV": "test", "DATABASE_URL": TEST_URL, "DATABASE_SCHEMA": "iam", "JWT_SECRET_KEY": SECRET,
+    "SERVICE_SUBJECTS": SERVICE_SUB, "AUTHZ_CACHE_TTL_SECONDS": "60",
 })
 
 import jwt  # noqa: E402
-from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from jwt.algorithms import RSAAlgorithm  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app.infrastructure.identity_provider import StaticKeyResolver, TokenVerifier  # noqa: E402
+from app.infrastructure.tokens import TokenService  # noqa: E402
 
 
-# ------------------------------------------------------------------ keys / tokens
-def _new_key():
-    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-
+# ------------------------------------------------------------------ tokens
 @pytest.fixture(scope="session")
-def signing_key():
-    return _new_key()
-
-
-@pytest.fixture(scope="session")
-def other_key():
-    return _new_key()
-
-
-@pytest.fixture(scope="session")
-def jwks(signing_key):
-    jwk = RSAAlgorithm.to_jwk(signing_key.public_key(), as_dict=True)
-    jwk.update({"kid": "test-key-1", "use": "sig", "alg": "RS256"})
-    return {"keys": [jwk]}
-
-
-@pytest.fixture(scope="session")
-def mint(signing_key):
-    def _mint(sub: str, *, key=None, iss=ISSUER, aud=AUDIENCE, exp_in=300, kid="test-key-1", alg="RS256", extra=None,
-              drop=()):
+def mint():
+    def _mint(sub: str, *, key=SECRET, iss=ISSUER, aud=AUDIENCE, exp_in=300, alg="HS256", extra=None, drop=()):
         now = int(time.time())
         claims = {"sub": sub, "iss": iss, "aud": aud, "iat": now, "exp": now + exp_in, **(extra or {})}
         for d in drop:
             claims.pop(d, None)
-        return jwt.encode(claims, key or signing_key, algorithm=alg, headers={"kid": kid})
+        return jwt.encode(claims, key, algorithm=alg)
 
     return _mint
 
 
 @pytest.fixture(scope="session")
-def verifier(jwks):
-    return TokenVerifier(StaticKeyResolver(jwks), issuer=ISSUER, audience=AUDIENCE, algorithms=["RS256"], leeway=0)
+def tokens():
+    return TokenService(SECRET, 300, leeway=0)
 
 
 # ------------------------------------------------------------------ database
@@ -133,10 +111,10 @@ def db(engine):
 
 
 @pytest.fixture
-def app(engine, verifier):
+def app(engine, tokens):
     from app.main import create_app
 
-    return create_app(verifier=verifier)
+    return create_app(tokens=tokens)
 
 
 @pytest.fixture
@@ -177,9 +155,10 @@ class World:
 
     # --- builders (direct DB setup; the API is what the tests exercise)
     def user(self, username, roles=(), scopes=(), status="ACTIVE"):
+        from app.core.passwords import hash_password
         from app.domain.models import User, UserAccessScope, UserRole
         u = User(external_identity_id=f"sub-{username}", username=username, display_name=username.title(),
-                 email=f"{username}@example.invalid", status=status)
+                 email=f"{username}@example.invalid", status=status, password_hash=hash_password(PASSWORD))
         self.db.add(u)
         self.db.flush()
         for r in roles:

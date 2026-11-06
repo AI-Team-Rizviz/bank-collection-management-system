@@ -1,7 +1,10 @@
 """Idempotent IAM seeding. Re-running never duplicates rows; catalog definitions are refreshed in place."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
+import secrets
 
 from sqlalchemy import Engine, MetaData, Table, create_engine, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -13,6 +16,15 @@ from seed.identity import demo_users, permissions, role_permissions, roles, team
 SCHEMA = "iam"
 IAM_ENV = PROJECT_ROOT.parent / "services" / "identity-access-service" / ".env"
 DEMO_ENVS = {"development", "test"}
+DEMO_PASSWORD = os.environ.get("DEMO_USER_PASSWORD", "DemoPass!2345")  # development-only; every demo user shares it
+
+
+def _hash_password(password: str) -> str:
+    """Same format as the IAM service (app/core/passwords.py): scrypt$n$r$p$salt$hash."""
+    n, r, p = 2**14, 8, 1
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=p, dklen=32, maxmem=64 * 1024 * 1024)
+    return f"scrypt${n}${r}${p}${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
 
 
 def iam_settings() -> dict[str, str]:
@@ -91,13 +103,16 @@ def seed_demo_users(engine: Engine, *, app_env: str | None = None) -> int:
     if env not in DEMO_ENVS:
         raise ConfigError(f"Refusing to seed demo users: APP_ENV={env!r} (allowed: {sorted(DEMO_ENVS)})")
     t = _tables(engine)
+    pw_hash = _hash_password(DEMO_PASSWORD)
     with engine.begin() as conn:
         rid, tid = _ids(conn, t["roles"], "code"), _ids(conn, t["teams"], "code")
         scope_ids = {(r.scope_type, r.scope_value): r.id for r in conn.execute(select(t["access_scopes"]))}
         for username, display, role_codes, memberships, scopes in demo_users.DEMO_USERS:
             conn.execute(insert(t["users"]).values(
                 external_identity_id=demo_users.external_id(username), username=username, display_name=display,
-                email=demo_users.email(username)).on_conflict_do_nothing(index_elements=["username"]))
+                email=demo_users.email(username), password_hash=pw_hash).on_conflict_do_nothing(index_elements=["username"]))
+            conn.execute(t["users"].update().where((t["users"].c.username == username) & t["users"].c.password_hash.is_(None))
+                         .values(password_hash=pw_hash))
             uid = conn.execute(select(t["users"].c.id).where(t["users"].c.username == username)).scalar_one()
             for rc in role_codes:  # partial unique index (active) makes this idempotent
                 conn.execute(insert(t["user_roles"]).values(user_id=uid, role_id=rid[rc], assigned_by=None)

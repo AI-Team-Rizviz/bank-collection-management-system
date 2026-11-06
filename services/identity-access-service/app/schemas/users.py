@@ -20,12 +20,15 @@ def _email(v: str) -> str:
 
 class UserCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"example": {
-        "external_identity_id": "oidc-subject-123", "username": "agent001",
-        "display_name": "Example Agent", "email": "agent001@example.invalid"}})
-    external_identity_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+        "username": "agent001", "display_name": "Example Agent", "email": "agent001@example.invalid",
+        "password": "a-strong-passphrase"}})
+    external_identity_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)] | None = Field(
+        None, description="Stable token subject. Defaults to `local-<username>`.")
     username: Username
     display_name: Display
     email: Email
+    password: Annotated[str, Field(min_length=10, max_length=128)] | None = Field(
+        None, description="Initial password. Without one the user cannot log in until an operator sets it.")
 
     @field_validator("email")
     @classmethod

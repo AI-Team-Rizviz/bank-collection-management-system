@@ -20,7 +20,7 @@ import type {
 
 /**
  * Live adapter: translates the identity-access-service REST API (snake_case, UUIDs,
- * limit/offset pages, Bearer OIDC tokens) into the view models the admin UI consumes.
+ * limit/offset pages, Bearer access tokens) into the view models the admin UI consumes.
  * Authorization is always decided by IAM; this layer only maps shapes.
  */
 
@@ -485,8 +485,8 @@ async function read(
     return id === "permissions" ? actor.permissions : actor;
   if (resource === "settings")
     return {
-      identityProvider: `OIDC · ${process.env.IAM_OIDC_ISSUER ?? "provider configured in IAM service"}`,
-      sessionPolicy: "Bearer access token held in an httpOnly cookie; lifetime set by the identity provider",
+      identityProvider: "Username and password · verified by the IAM service",
+      sessionPolicy: "Bearer access token held in an httpOnly cookie; lifetime set by the IAM service",
       approvalPolicy:
         "Independent maker-checker enforced for privileged roles, sensitive permissions and escalating scopes",
       reviewPeriod: "Quarterly access review · scheduling planned",
