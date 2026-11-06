@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { mockEnabled, routePermissions, can } from "@/lib/auth/policy";
-import { getSession } from "@/lib/auth/server";
+import { getSession, getAccessToken } from "@/lib/auth/server";
 import { ApiError } from "@/lib/api/error";
 import { ZodError } from "zod";
 import type { ListParams } from "@/lib/api/types";
@@ -61,46 +61,23 @@ async function handle(
         { headers: { "Cache-Control": "no-store" } },
       );
     }
-    // Proposed contracts are proxied without implementing IAM authorization in Next.js.
-    const cookieName = process.env.IAM_SESSION_COOKIE ?? "__Host-iam_session";
-    const token = request.cookies.get(cookieName)?.value;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Cookie: `${cookieName}=${encodeURIComponent(token ?? "")}`,
-    };
-    // Propagate the IdP's CSRF token when its cookie-based API requires one.
-    const csrf = request.headers.get("x-csrf-token");
-    if (csrf) headers["x-csrf-token"] = csrf;
-    const response = await fetch(
-      `${process.env.IAM_API_BASE_URL}/api/v1/${path.map(encodeURIComponent).join("/")}${request.nextUrl.search}`,
-      {
-        method: request.method,
-        headers,
-        body: ["GET", "HEAD"].includes(request.method)
-          ? undefined
-          : await request.text(),
-        signal: AbortSignal.timeout(15000),
-        cache: "no-store",
-        redirect: "error",
-      },
+    const token = await getAccessToken();
+    if (!token) throw new ApiError(401, "Session expired. Please sign in again.");
+    const body = ["POST", "PATCH"].includes(request.method)
+      ? await request.json().catch(() => ({}))
+      : {};
+    const { liveHandle } = await import("@/lib/iam/live");
+    const result = await liveHandle(
+      request.method,
+      path.join("/"),
+      session,
+      token,
+      Object.fromEntries(request.nextUrl.searchParams) as ListParams,
+      body,
     );
-    if (!response.ok)
-      throw new ApiError(
-        response.status,
-        response.status === 403
-          ? "IAM denied this operation"
-          : "IAM could not complete the request",
-      );
-    return new Response(
-      response.status === 204 ? null : await response.text(),
-      {
-        status: response.status,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        },
-      },
-    );
+    return Response.json(result ?? {}, {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
     if (error instanceof ZodError)
       return Response.json(

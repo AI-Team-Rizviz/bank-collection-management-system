@@ -17,7 +17,9 @@ async function AuthenticatedAdmin({ children }: { children: React.ReactNode }) {
           OIDC login is awaiting your identity provider integration. Production
           access is disabled until it is connected.
         </p>
-        <Link href="/">Return to application</Link>
+        <Link href={process.env.IAM_ADAPTER === "live" ? "/login" : "/"}>
+          {process.env.IAM_ADAPTER === "live" ? "Sign in" : "Return to application"}
+        </Link>
       </main>
     );
   return (
