@@ -1,0 +1,18 @@
+# Optional overrides for `--config`. Everything here is a SYNTHETIC assumption.
+seed = 42
+profile = "small"
+# customers = 2500          # with profile = "custom"
+as_of_date = 2026-11-06
+accounts_per_customer = 1.5
+
+[delinquency]               # share of accounts per bucket at as_of (must sum to 1)
+current = 0.75
+dpd_1_30 = 0.12
+dpd_31_60 = 0.06
+dpd_61_90 = 0.04
+dpd_90_plus = 0.03
+
+[policy]
+grace_days = 0
+card_min_pct = "5.00"
+card_monthly_finance_rate = "3.50"

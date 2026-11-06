@@ -1,0 +1,23 @@
+[project]
+name = "bank-cms-seed"
+version = "0.1.0"
+description = "Synthetic banking data generator and PostgreSQL seeder for a Bank Collection Management System"
+requires-python = ">=3.11"
+dependencies = [
+  "sqlalchemy>=2.0",
+  "psycopg[binary]>=3.2",
+  "alembic>=1.13",
+  "pydantic>=2.6",
+  "typer>=0.12",
+  "tzdata",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["seed*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["db: integration tests that need the PostgreSQL database"]
