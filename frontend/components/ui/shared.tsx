@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useId, cloneElement, isValidElement } from "react";
 import {
   AlertCircle,
   Check,
@@ -210,15 +211,22 @@ export function Field({
   error?: string;
   children: React.ReactNode;
 }) {
+  const id = useId();
   return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      {isValidElement<React.HTMLAttributes<HTMLElement>>(children)
+        ? cloneElement(children, {
+            id,
+            "aria-invalid": !!error,
+            "aria-describedby": error ? `${id}-error` : undefined,
+          })
+        : children}
       {error && (
-        <span className="field-error" role="alert">
+        <span className="field-error" id={`${id}-error`} role="alert">
           {error}
         </span>
       )}
-    </label>
+    </div>
   );
 }

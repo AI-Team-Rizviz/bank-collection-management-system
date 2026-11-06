@@ -249,13 +249,15 @@ function TeamForm({
             <option value="INACTIVE">Inactive</option>
           </select>
         </Field>
-        <Notice error={mutation.error} />
+        <Notice error={mutation.error ?? users.error} />
       </div>
       <div className="dialog-footer">
         <Button type="button" variant="outline" onClick={close}>
           Cancel
         </Button>
-        <Button disabled={mutation.isPending}>
+        <Button
+          disabled={mutation.isPending || users.isPending || users.isError}
+        >
           {mutation.isPending ? "Saving…" : "Save team"}
         </Button>
       </div>
@@ -364,7 +366,7 @@ function TeamMembers({
           </Button>
         </div>
       )}
-      <Notice error={mutation.error} />
+      <Notice error={mutation.error ?? users.error} />
     </div>
   );
 }

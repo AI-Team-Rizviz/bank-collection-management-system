@@ -13,7 +13,8 @@ export const sessionSchema = z.object({
   mock: z.literal(false),
 });
 export async function getSession(): Promise<Session | null> {
-  if (mockEnabled()) return (await import("@/mocks/fixtures")).mockSession;
+  if (mockEnabled())
+    return (await import("@/mocks/service")).mockService().session();
   // Live sessions are owned and verified by IAM. No browser tokens are accepted.
   if (process.env.IAM_ADAPTER !== "live" || !process.env.IAM_API_BASE_URL)
     return null;

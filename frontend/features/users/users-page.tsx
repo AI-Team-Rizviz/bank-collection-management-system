@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Plus, SlidersHorizontal, ArrowUpRight } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useList } from "@/lib/api/hooks";
@@ -20,7 +21,12 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { UserForm } from "./user-form";
 export function UsersPage() {
-  const [params, setParams] = useState<ListParams>({ page: 1, pageSize: 8 }),
+  const searchParams = useSearchParams();
+  const [params, setParams] = useState<ListParams>({
+      page: 1,
+      pageSize: 8,
+      status: searchParams.get("status") ?? "",
+    }),
     [create, setCreate] = useState(false),
     [message, setMessage] = useState("");
   const users = useList("users", params),

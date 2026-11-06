@@ -218,6 +218,15 @@ export function seed() {
                           : "Communication",
     action: code.split(".").at(-1)!,
     sensitive: /assign|approve|activate|revoke|deactivate/.test(code),
+    allowedScopes: code.startsWith("case.read_assigned")
+      ? ["OWN"]
+      : code.startsWith("case.read_team")
+        ? ["TEAM"]
+        : code.startsWith("case.read_portfolio")
+          ? ["REGION", "PORTFOLIO"]
+          : /^(case|ptp|communication|delinquency)\./.test(code)
+            ? ["OWN", "TEAM", "BRANCH", "REGION", "PORTFOLIO"]
+            : null,
     roleIds: roles.filter((r) => r.permissions.includes(code)).map((r) => r.id),
   }));
   const scopes: Scope[] = users.map((u, i) => ({
@@ -250,11 +259,18 @@ export function seed() {
     risk: i === 3 ? "Standard" : "High",
     justification:
       "Access required for approved operational responsibilities in the Punjab region.",
-    existingAccess: ["Collection Agent · Own scope"],
+    existingAccess: users
+      .find((u) => u.id === change.userId)!
+      .roleIds.map((id) => roles.find((r) => r.id === id)!.name)
+      .concat(
+        scopes
+          .filter((s) => s.userId === change.userId)
+          .map((s) => `${s.type} · ${s.reference}`),
+      ),
     proposedAccess:
       change.kind === "GRANT_SCOPE"
         ? "Region · Punjab"
-        : roles.find((r) => r.id === change.roleId)!.name,
+        : `${change.kind === "REVOKE_ROLE" ? "Revoke " : ""}${roles.find((r) => r.id === change.roleId)!.name}`,
     history: [
       {
         actor: i === 2 ? "Ahmed Raza" : "Fatima Khan",

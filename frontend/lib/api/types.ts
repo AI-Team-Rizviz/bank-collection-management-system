@@ -42,6 +42,7 @@ export interface Permission {
   module: string;
   action: string;
   sensitive: boolean;
+  allowedScopes: ScopeType[] | null;
   roleIds: string[];
 }
 export interface Team {
@@ -67,7 +68,8 @@ export type Change =
     }
   | { kind: "GRANT_ROLE_PERMISSION"; roleId: string; permission: string }
   | { kind: "REVOKE_ROLE_PERMISSION"; roleId: string; permission: string }
-  | { kind: "DEACTIVATE_USER"; userId: string };
+  | { kind: "DEACTIVATE_USER"; userId: string }
+  | { kind: "REACTIVATE_USER"; userId: string };
 export interface AccessRequest {
   id: string;
   change: Change;

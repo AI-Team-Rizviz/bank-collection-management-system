@@ -71,6 +71,7 @@ export const changeSchema = z.discriminatedUnion("kind", [
     permission: z.string().min(1),
   }),
   z.object({ kind: z.literal("DEACTIVATE_USER"), userId: z.string().min(1) }),
+  z.object({ kind: z.literal("REACTIVATE_USER"), userId: z.string().min(1) }),
 ]);
 export const requestSchema = z.object({
   change: changeSchema,

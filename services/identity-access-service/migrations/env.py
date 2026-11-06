@@ -26,7 +26,10 @@ def _include(obj, name, type_, reflected, compare_to):
 def run() -> None:
     engine = create_engine(_url())
     with engine.connect() as conn:
-        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{SCHEMA}"'))
+        # Normally pre-created (owned by the migration role) by scripts/db/init_iam_roles.sql. Only attempt creation
+        # when it is missing: even IF NOT EXISTS needs database-level CREATE, which the migration role should not have.
+        if not conn.scalar(text("SELECT 1 FROM pg_namespace WHERE nspname = :n"), {"n": SCHEMA}):
+            conn.execute(text(f'CREATE SCHEMA "{SCHEMA}"'))
         conn.commit()
         context.configure(
             connection=conn,

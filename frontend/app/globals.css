@@ -2629,4 +2629,43 @@ tbody tr:hover {
   }
 }
 
-.stat-card p{white-space:normal;line-height:1.6;min-height:32px}.stat-label{white-space:normal;min-height:30px;align-items:flex-start}.approvals-table .cell-stack strong{white-space:normal}.activity-row p{font-size:11px}.governance-card li{font-size:11px}.governance-card>p{font-size:12px}.governance-foot{font-size:10px}.app-footer{font-size:10px}.quick-links>a,.quick-links>button{font-size:11px}.quick-actions small{font-size:11px}
+.stat-card p {
+  white-space: normal;
+  line-height: 1.6;
+  min-height: 32px;
+}
+.stat-label {
+  white-space: normal;
+  min-height: 30px;
+  align-items: flex-start;
+}
+.approvals-table .cell-stack strong {
+  white-space: normal;
+}
+.activity-row p {
+  font-size: 11px;
+}
+.governance-card li {
+  font-size: 11px;
+}
+.governance-card > p {
+  font-size: 12px;
+}
+.governance-foot {
+  font-size: 10px;
+}
+.app-footer {
+  font-size: 10px;
+}
+.quick-links > a,
+.quick-links > button {
+  font-size: 11px;
+}
+.quick-actions small {
+  font-size: 11px;
+}
+
+.field > label {
+  font-size: 12px;
+  font-weight: 500;
+}

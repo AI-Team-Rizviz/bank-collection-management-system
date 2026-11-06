@@ -191,7 +191,7 @@ export function UserDetail({ id }: { id: string }) {
                         </h3>
                         <p>
                           {data.roles.some((r) => r.privileged)
-                            ? "Privileged deactivation requires independent approval."
+                            ? "Privileged account status changes require independent approval."
                             : "Account status changes are applied and audited."}
                         </p>
                       </div>
@@ -347,13 +347,15 @@ function AssignRole({
         >
           <textarea rows={3} {...form.register("justification")} />
         </Field>
-        <Notice error={mutation.error} />
+        <Notice error={mutation.error ?? roles.error} />
       </div>
       <div className="dialog-footer">
         <Button type="button" variant="outline" onClick={close}>
           Cancel
         </Button>
-        <Button disabled={mutation.isPending || roles.isPending}>
+        <Button
+          disabled={mutation.isPending || roles.isPending || roles.isError}
+        >
           {mutation.isPending ? "Submitting…" : "Assign role"}
         </Button>
       </div>

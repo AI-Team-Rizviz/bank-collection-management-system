@@ -276,3 +276,59 @@ describe("isolated mock IAM contract", () => {
     expect(mockEnabled({ NODE_ENV: "development" })).toBe(false);
   });
 });
+it("cannot submit a scope expansion through the ordinary role endpoint", async () => {
+  await expect(
+    service.handle(
+      "POST",
+      "users/USER-003/roles",
+      mockSession,
+      {},
+      {
+        change: {
+          kind: "GRANT_SCOPE",
+          userId: "USER-003",
+          roleId: "ROLE-2",
+          scopeType: "REGION",
+          reference: "Punjab",
+        },
+        justification: "Expanded operational access",
+      },
+    ),
+  ).rejects.toMatchObject({ status: 400 });
+});
+it("resource permissions require a matching approved role scope", async () => {
+  service.db.scopes = service.db.scopes.filter((s) => s.userId !== "USER-008");
+  const details = (await service.handle("GET", "users/USER-008")) as {
+    permissions: string[];
+  };
+  expect(details.permissions).not.toContain("case.read_assigned");
+});
+it("privileged reactivation stays pending and cannot bypass review", async () => {
+  service.db.users[4].status = "INACTIVE";
+  const result = (await service.handle(
+    "POST",
+    "users/USER-005/reactivate",
+    mockSession,
+    {},
+    {},
+  )) as MutationResult;
+  expect(service.db.users[4].status).toBe("INACTIVE");
+  expect(result.request?.change.kind).toBe("REACTIVATE_USER");
+});
+it("new mock sessions reflect approved permission revocations", () => {
+  expect(service.session()?.permissions).toContain("iam.user.create");
+  service.db.roles[5].permissions = service.db.roles[5].permissions.filter(
+    (p) => p !== "iam.user.create",
+  );
+  expect(service.session()?.permissions).not.toContain("iam.user.create");
+});
+it("dashboard does not disclose audit records without audit permission", async () => {
+  const actor = { ...mockSession, permissions: ["iam.user.read"] };
+  const dashboard = (await service.handle(
+    "GET",
+    "dashboard",
+    actor,
+  )) as Dashboard;
+  expect(dashboard.activity).toEqual([]);
+  expect(dashboard.requests).toEqual([]);
+});

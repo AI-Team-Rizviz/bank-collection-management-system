@@ -1,3 +1,4 @@
+import { Authorized } from "@/components/auth/authorized";
 import { RoleDetail } from "@/features/roles/role-detail";
 export default async function Page({
   params,
@@ -5,5 +6,9 @@ export default async function Page({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <RoleDetail id={id} />;
+  return (
+    <Authorized permission="iam.role.read">
+      <RoleDetail id={id} />
+    </Authorized>
+  );
 }

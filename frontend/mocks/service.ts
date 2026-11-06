@@ -18,6 +18,28 @@ import {
 import { can } from "@/lib/auth/policy";
 export class MockIamService {
   constructor(public db: Store = seed()) {}
+  session(): Session | null {
+    const user = this.db.users.find((u) => u.id === mockSession.id);
+    if (!user || user.status !== "ACTIVE") return null;
+    return {
+      ...mockSession,
+      name: user.name,
+      email: user.email,
+      permissions: [
+        ...new Set(user.roleIds.flatMap((id) => this.role(id).permissions)),
+      ],
+    };
+  }
+  visibleRequest(actor: Session, request: AccessRequest) {
+    return (
+      !("userId" in request.change) ||
+      this.db.users.some(
+        (u) =>
+          u.id === ("userId" in request.change ? request.change.userId : "") &&
+          actor.regions.includes(u.region),
+      )
+    );
+  }
   require(actor: Session, permission: string) {
     if (!can(actor, permission))
       throw new ApiError(403, `Permission required: ${permission}`);
@@ -92,15 +114,24 @@ export class MockIamService {
     });
     if (p.sort) {
       const key = p.sort;
-      rows = rows.toSorted(
-        (a, b) =>
-          String((a as Record<string, unknown>)[key] ?? "").localeCompare(
-            String((b as Record<string, unknown>)[key] ?? ""),
-          ) * (p.direction === "desc" ? -1 : 1),
-      );
+      rows = rows.toSorted((a, b) => {
+        const left = (a as Record<string, unknown>)[key],
+          right = (b as Record<string, unknown>)[key];
+        const comparison =
+          typeof left === "number" && typeof right === "number"
+            ? left - right
+            : String(left ?? "").localeCompare(String(right ?? ""));
+        return comparison * (p.direction === "desc" ? -1 : 1);
+      });
     }
-    const page = Math.max(1, Number(p.page) || 1),
-      pageSize = Math.min(100, Math.max(1, Number(p.pageSize) || 8));
+    const pageSize = Math.min(
+      100,
+      Math.max(1, Math.floor(Number(p.pageSize) || 8)),
+    );
+    const page = Math.min(
+      Math.max(1, Math.ceil(rows.length / pageSize)),
+      Math.max(1, Math.floor(Number(p.page) || 1)),
+    );
     return {
       items: rows.slice((page - 1) * pageSize, page * pageSize),
       total: rows.length,
@@ -116,7 +147,7 @@ export class MockIamService {
           ? "iam.user_role.assign"
           : c.kind === "REVOKE_ROLE"
             ? "iam.user_role.revoke"
-            : c.kind === "DEACTIVATE_USER"
+            : c.kind === "DEACTIVATE_USER" || c.kind === "REACTIVATE_USER"
               ? "iam.user.deactivate"
               : "iam.permission.assign";
     this.require(actor, permission);
@@ -188,8 +219,11 @@ export class MockIamService {
       if (has === (c.kind === "GRANT_ROLE_PERMISSION"))
         throw new ApiError(409, "Permission mapping has already changed");
     }
-    if (c.kind === "DEACTIVATE_USER" && c.userId === actor.id)
-      throw new ApiError(403, "You cannot deactivate your own account");
+    if (
+      (c.kind === "DEACTIVATE_USER" || c.kind === "REACTIVATE_USER") &&
+      c.userId === actor.id
+    )
+      throw new ApiError(403, "You cannot change your own account status");
   }
   apply(actor: Session, c: Change) {
     this.validateChange(actor, c);
@@ -213,17 +247,30 @@ export class MockIamService {
       });
     if (c.kind === "DEACTIVATE_USER")
       this.user(actor, c.userId).status = "INACTIVE";
+    if (c.kind === "REACTIVATE_USER")
+      this.user(actor, c.userId).status = "ACTIVE";
     if (c.kind === "GRANT_ROLE_PERMISSION")
       this.role(c.roleId).permissions.push(c.permission);
     if (c.kind === "REVOKE_ROLE_PERMISSION")
       this.role(c.roleId).permissions = this.role(c.roleId).permissions.filter(
         (p) => p !== c.permission,
       );
+    const actions: Record<Change["kind"], string> = {
+      ASSIGN_ROLE: "Role assigned",
+      REVOKE_ROLE: "Role revoked",
+      GRANT_SCOPE: "Scope granted",
+      GRANT_ROLE_PERMISSION: "Permission granted",
+      REVOKE_ROLE_PERMISSION: "Permission revoked",
+      DEACTIVATE_USER: "User deactivated",
+      REACTIVATE_USER: "User reactivated",
+    };
+    const target =
+      "userId" in c ? this.user(actor, c.userId) : this.role(c.roleId);
     this.log(
       actor,
-      c.kind.replaceAll("_", " "),
-      "userId" in c ? c.userId : c.roleId,
-      `${actor.name} applied ${c.kind.toLowerCase().replaceAll("_", " ")}.`,
+      actions[c.kind],
+      target.id,
+      `${actor.name}: ${actions[c.kind].toLowerCase()} for ${target.name}${"permission" in c ? ` · ${c.permission}` : "roleId" in c ? ` · ${this.role(c.roleId).name}` : ""}.`,
     );
   }
   createRequest(
@@ -261,8 +308,8 @@ export class MockIamService {
           ? `${c.scopeType} · ${c.reference}`
           : c.kind === "ASSIGN_ROLE" || c.kind === "REVOKE_ROLE"
             ? `${c.kind === "REVOKE_ROLE" ? "Revoke " : ""}${this.role(c.roleId).name}`
-            : c.kind === "DEACTIVATE_USER"
-              ? "Deactivate privileged account"
+            : c.kind === "DEACTIVATE_USER" || c.kind === "REACTIVATE_USER"
+              ? `${c.kind === "DEACTIVATE_USER" ? "Deactivate" : "Reactivate"} privileged account`
               : `${c.kind} · ${c.permission}`,
       history: [
         {
@@ -310,6 +357,13 @@ export class MockIamService {
       if (!perm[resource]) throw new ApiError(404, "Endpoint not found");
       this.require(actor, perm[resource]);
       const users = db.users.filter((u) => actor.regions.includes(u.region));
+      const requests = db.requests.filter((r) => this.visibleRequest(actor, r));
+      const audit = db.audit.filter((event) => {
+        const user = db.users.find((u) => u.id === event.target);
+        if (user) return actor.regions.includes(user.region);
+        const request = db.requests.find((r) => r.id === event.target);
+        return !request || this.visibleRequest(actor, request);
+      });
       if (resource === "dashboard")
         return {
           totalUsers: users.length,
@@ -318,7 +372,7 @@ export class MockIamService {
             ["INACTIVE", "SUSPENDED"].includes(u.status),
           ).length,
           totalRoles: db.roles.length,
-          pendingRequests: db.requests.filter((r) => r.status === "PENDING")
+          pendingRequests: requests.filter((r) => r.status === "PENDING")
             .length,
           activeTeams: db.teams.filter(
             (t) => t.status === "ACTIVE" && actor.regions.includes(t.region),
@@ -332,10 +386,10 @@ export class MockIamService {
             status,
             count: users.filter((u) => u.status === status).length,
           })),
-          requests: db.requests
+          requests: (can(actor, "iam.access.request") ? requests : [])
             .filter((r) => r.status === "PENDING")
             .slice(0, 4),
-          activity: db.audit.slice(0, 5),
+          activity: can(actor, "iam.audit.read") ? audit.slice(0, 5) : [],
         };
       if (resource === "users") {
         if (!id) return this.page(users, params);
@@ -347,7 +401,27 @@ export class MockIamService {
         return {
           user,
           roles,
-          permissions: [...new Set(roles.flatMap((r) => r.permissions))],
+          permissions:
+            user.status !== "ACTIVE"
+              ? []
+              : [
+                  ...new Set(
+                    roles.flatMap((r) =>
+                      r.permissions.filter((code) => {
+                        const p = db.permissions.find((p) => p.code === code);
+                        return (
+                          !p?.allowedScopes ||
+                          db.scopes.some(
+                            (s) =>
+                              s.userId === user.id &&
+                              s.roleId === r.id &&
+                              p.allowedScopes?.includes(s.type),
+                          )
+                        );
+                      }),
+                    ),
+                  ),
+                ],
           scopes: db.scopes.filter((s) => s.userId === id),
           teams: db.teams.filter((t) => t.memberIds.includes(id)),
           audit: db.audit.filter((e) => e.target === id),
@@ -394,13 +468,15 @@ export class MockIamService {
         );
       if (resource === "access-requests") {
         if (id) {
-          const request = db.requests.find((r) => r.id === id);
+          const request = db.requests.find(
+            (r) => r.id === id && this.visibleRequest(actor, r),
+          );
           if (!request) throw new ApiError(404, "Request not found");
           return request;
         }
-        return this.page(db.requests, params);
+        return this.page(requests, params);
       }
-      if (resource === "audit-logs") return this.page(db.audit, params);
+      if (resource === "audit-logs") return this.page(audit, params);
       if (resource === "settings")
         return {
           identityProvider:
@@ -518,16 +594,17 @@ export class MockIamService {
       const user = this.user(actor, id);
       if (user.id === actor.id)
         throw new ApiError(403, "You cannot change your own account status");
-      if (
-        user.roleIds.some((id) => this.role(id).privileged) &&
-        action === "deactivate"
-      )
+      if (user.roleIds.some((id) => this.role(id).privileged))
         return {
-          message: "Deactivation submitted for approval",
+          message: "Privileged account status change submitted for approval",
           request: this.createRequest(
             actor,
-            { kind: "DEACTIVATE_USER", userId: id },
-            "Privileged account deactivation requested by administrator.",
+            {
+              kind:
+                action === "deactivate" ? "DEACTIVATE_USER" : "REACTIVATE_USER",
+              userId: id,
+            },
+            "Privileged account status change requested by administrator.",
           ),
         };
       user.status = action === "deactivate" ? "INACTIVE" : "ACTIVE";
@@ -541,6 +618,11 @@ export class MockIamService {
     }
     if (resource === "users" && action === "roles" && method === "POST") {
       const c = requestSchema.parse(body);
+      if (c.change.kind !== "ASSIGN_ROLE" && c.change.kind !== "REVOKE_ROLE")
+        throw new ApiError(
+          400,
+          "This endpoint accepts role assignments and revocations only",
+        );
       if (!("userId" in c.change) || c.change.userId !== id)
         throw new ApiError(400, "Target mismatch");
       this.validateChange(actor, c.change);
@@ -605,8 +687,12 @@ export class MockIamService {
         throw new ApiError(400, "Select an active Collection Supervisor");
       if (db.teams.some((t) => t.code === data.code && t.id !== id))
         throw new ApiError(409, "Team code already exists");
-      if (id) {const team=this.team(actor,id);Object.assign(team,data);if(!team.memberIds.includes(data.supervisorId))team.memberIds.push(data.supervisorId);}
-      else
+      if (id) {
+        const team = this.team(actor, id);
+        Object.assign(team, data);
+        if (!team.memberIds.includes(data.supervisorId))
+          team.memberIds.push(data.supervisorId);
+      } else
         db.teams.push({
           ...data,
           id: `TEAM-${crypto.randomUUID().slice(0, 6)}`,
@@ -645,7 +731,9 @@ export class MockIamService {
       }
       this.require(actor, "iam.access.approve");
       const data = decisionSchema.parse(body);
-      const request = db.requests.find((r) => r.id === id);
+      const request = db.requests.find(
+        (r) => r.id === id && this.visibleRequest(actor, r),
+      );
       if (!request) throw new ApiError(404, "Request not found");
       if (!["approve", "reject"].includes(action))
         throw new ApiError(404, "Unknown decision");
@@ -664,7 +752,7 @@ export class MockIamService {
       }
       if (request.status !== "PENDING")
         throw new ApiError(409, "Request has already been reviewed");
-      this.validateChange(actor, request.change);
+      if ("userId" in request.change) this.user(actor, request.change.userId);
       if (action === "approve") this.apply(actor, request.change);
       request.status = action === "approve" ? "APPLIED" : "REJECTED";
       request.history.push({
@@ -693,5 +781,8 @@ declare global {
   var __mockIam: MockIamService | undefined;
 }
 export function mockService() {
-  return (globalThis.__mockIam ??= new MockIamService());
+  const service = (globalThis.__mockIam ??= new MockIamService());
+  // Preserve development data while refreshing methods after Next.js hot reload.
+  Object.setPrototypeOf(service, MockIamService.prototype);
+  return service;
 }

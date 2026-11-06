@@ -209,3 +209,16 @@ History and timestamps are preserved and snapshots contain only information avai
 * Schedule validation reuses the generator's amortisation function for the row-by-row recomputation; independence is provided by the hand-calculated golden tests.
 * Balance reconciliation is exhaustive up to 20,000 accounts and sampled (1/4) above that.
 * `DATABASE_URL` in this repository's `.env` had a duplicated prefix; the loader tolerates it, but it should be corrected.
+
+## IAM reference data (identity-access-service)
+
+`seed/identity/` seeds the `iam` schema owned by `services/identity-access-service` (10 roles, permission catalog, role mappings,
+fictional teams/scopes, optional dev-only demo users). It is idempotent and uses the IAM service's **own** database credentials
+(`IAM_DATABASE_URL` or `services/identity-access-service/.env`), not this module's `DATABASE_URL`.
+
+```bash
+python -m seed.cli identity seed                 # reference data (safe everywhere)
+python -m seed.cli identity seed --demo-users    # + fictional users; refuses unless the IAM APP_ENV is development/test
+```
+
+Run the IAM service's `alembic upgrade head` first. See `services/identity-access-service/README.md`.

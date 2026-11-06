@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Resources } from "./client";
 import type { ListParams } from "./types";
@@ -6,9 +7,15 @@ export function useList<K extends keyof Resources>(
   resource: K,
   params: ListParams = {},
 ) {
+  const [search, setSearch] = useState(params.search);
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(params.search), 250);
+    return () => clearTimeout(timer);
+  }, [params.search]);
+  const effectiveParams = { ...params, search };
   return useQuery({
-    queryKey: ["iam", resource, params],
-    queryFn: ({ signal }) => api.list(resource, params, signal),
+    queryKey: ["iam", resource, effectiveParams],
+    queryFn: ({ signal }) => api.list(resource, effectiveParams, signal),
     placeholderData: (previous) => previous,
   });
 }
